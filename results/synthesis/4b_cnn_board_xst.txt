@@ -1,0 +1,33 @@
+Stage 4b (top_4b: cnn_board + Stage 3c cnn_stream), XST excerpt
+ISE 14.7, xc6vlx240t-1-ff1156, IMG_W = 96, IMG_H = 64, 200 MHz board clock
+
+Advanced HDL Synthesis Report
+# RAMs                                                 : 3
+ 128x16-bit dual-port block RAM                        : 1    (line buffer)
+ 8192x32-bit dual-port block RAM                       : 1    (results)
+ 8192x8-bit dual-port block RAM                        : 1    (image)
+# MACs                                                 : 40
+ 20x16-to-37-bit MAC                                   : 4    (requant)
+ 9x8-to-20-bit MAC                                     : 36   (systolic taps)
+
+INFO:Xst:3226 - The RAM <Mram_img_mem> will be implemented as a BLOCK RAM,
+                absorbing the following register(s): <img_q> <cnn/conv/s1_pix>
+INFO:Xst:2146 - In block <cnn_board>, Counter <res_waddr> <n_out> are equivalent,
+                XST will keep only <res_waddr>.
+
+Device utilization summary
+ Number of Slice Registers:            1885  out of  301440     0%
+ Number of Slice LUTs:                 1891  out of  150720     1%
+    Number used as SRL:                  70
+ Number of Block RAM/FIFO:               11  out of    416     2%   (10 x RAMB36E1, 1 x RAMB18E1)
+ Number of DSP48E1s:                     40  out of    768     5%
+
+Timing Summary (synthesis estimate)
+   Minimum period: 3.678ns (Maximum Frequency: 271.903MHz)
+   Slowest path: core/utx/n_0 (uart_tx busy) -> command FSM -> core/rbuf (reply buffer)
+                 0.974 ns logic + 2.704 ns route, 6 levels: control logic, not the CNN datapath
+
+Place and route: All Constraints Met (TS_sysclk 5 ns), final timing score 0.
+49 warnings, all benign: width truncation on counters (HDLCompiler:413), unused
+qbuf2<7:4> (20-bit bias), constant rbuf<63:53> / rlen<3> (replies <= 7 bytes),
+constant uart_tx sh<0>/sh<9> and sys_mac a_r<8>.

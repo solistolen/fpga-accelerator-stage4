@@ -1,0 +1,30 @@
+# Stage 4b pin and timing constraints (identical to Stage 4a) for the Xilinx ML605 (XC6VLX240T-1FF1156).
+#
+# Pin locations are from UG534 (ML605 Hardware User Guide), Appendix D
+# "ML605 Master UCF" and Table 1-15 (USB-to-UART bridge).
+#
+# NOTE on the UART names: the board's net names USB_1_TX / USB_1_RX describe
+# the CP2103 bridge's pins, not the FPGA's:
+#   USB_1_TX  (J24) = CP2103 TXD (pin 25) -> the FPGA RECEIVES on J24
+#   USB_1_RX  (J25) = CP2103 RXD (pin 24) -> the FPGA TRANSMITS on J25
+# Here the ports are named from the FPGA's side.
+
+# ---- 200 MHz system clock (2.5 V LVDS oscillator U11) ----
+NET "SYSCLK_P" LOC = "J9"  | IOSTANDARD = LVDS_25 | DIFF_TERM = TRUE;
+NET "SYSCLK_N" LOC = "H9"  | IOSTANDARD = LVDS_25 | DIFF_TERM = TRUE;
+NET "SYSCLK_P" TNM_NET = "sysclk";
+TIMESPEC "TS_sysclk" = PERIOD "sysclk" 5 ns HIGH 50%;
+
+# ---- USB-UART (CP2103, mini-B connector labeled USB UART) ----
+NET "UART_RX" LOC = "J24" | IOSTANDARD = LVCMOS25;   # board net USB_1_TX
+NET "UART_TX" LOC = "J25" | IOSTANDARD = LVCMOS25;   # board net USB_1_RX
+
+# ---- user LEDs (GPIO_LED_0 .. GPIO_LED_7) ----
+NET "GPIO_LED<0>" LOC = "AC22" | IOSTANDARD = LVCMOS25;
+NET "GPIO_LED<1>" LOC = "AC24" | IOSTANDARD = LVCMOS25;
+NET "GPIO_LED<2>" LOC = "AE22" | IOSTANDARD = LVCMOS25;
+NET "GPIO_LED<3>" LOC = "AE23" | IOSTANDARD = LVCMOS25;
+NET "GPIO_LED<4>" LOC = "AB23" | IOSTANDARD = LVCMOS25;
+NET "GPIO_LED<5>" LOC = "AG23" | IOSTANDARD = LVCMOS25;
+NET "GPIO_LED<6>" LOC = "AE24" | IOSTANDARD = LVCMOS25;
+NET "GPIO_LED<7>" LOC = "AD24" | IOSTANDARD = LVCMOS25;

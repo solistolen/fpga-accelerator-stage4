@@ -46,3 +46,6 @@ webtalk*
 *.vvp
 echo_sim
 *.vcd
+
+# Stage 4b host script output (copy into results/ to keep)
+scripts/board_bank*.png

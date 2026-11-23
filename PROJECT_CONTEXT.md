@@ -66,12 +66,14 @@ the last window that used it; requant parameters ≥ 12 clocks.
   after place and route (score 0), LED 7 blinks, `scripts/uart_test.py` PASS at 11,453 bytes/s
   (99.4% of 115200 baud). JTAG chain = `xccace` (bypass) + `xc6vlx240t`. Windows needed the
   Silicon Labs CP210x VCP driver.
-- **4b:** put `cnn_stream` on the board behind the UART. Proposed: PC sends weights (72 bytes),
-  requant parameters, then an image into an on-chip BRAM; the board runs the image through the
-  layer at full clock speed into an output BRAM while a cycle counter measures it; then the PC
-  reads back the 4 maps + cycle count and compares with the Python golden model
-  (`gen_cnn.py` in the stage 3 repo). UART is ~11.5 KB/s, fine for the 96×64 test image, far too
-  slow for video — the cycle counter measures the compute itself.
+- **4b (passed on the board, 2026-11-23; all 46,624 output bytes match, 40 DSPs, 11 BRAMs, timing
+  met at 200 MHz):** `cnn_board` puts `cnn_stream` behind the
+  UART. The PC sends weights (`W`), requant parameters (`Q`) and a 96×64 image (`I`) into an image
+  BRAM. `R` + bank streams the frame at one pixel per clock into a result BRAM and returns the
+  cycle count; `O` reads back the 4 maps. `scripts/cnn_host.py` checks every byte against
+  `scripts/cnn_ref.py`. Simulated result: 6165 clocks per frame (6144 + 21), 30.8 µs at 200 MHz.
+  `tb_cnn_board` drives only the UART pins; 7 planted bugs were all caught. The `cnn_stream` reset
+  before every frame is required, because its row counter doesn't wrap. ISE project: `Board4b`.
 - **4c:** GPU side of the comparison (same filters on the PC GPU, e.g. Python/OpenCV or
   PyTorch), and the measured FPGA-vs-GPU table: compute time, transfer time, latency. Faster
   board I/O (Ethernet or PCIe) is a possible later step.
@@ -79,6 +81,8 @@ the last window that used it; requant parameters ≥ 12 clocks.
 ## ML605 facts (checked against UG534)
 
 - 200 MHz system clock: LVDS on **J9 (P) / H9 (N)**.
+- FPGA package pins (ball positions such as J24) are not the board's connector numbers. On the
+  board, **J21** is the USB UART mini-B connector and **J22** is the USB JTAG connector.
 - USB-UART (CP2103): the FPGA **receives on J24** (net `USB_1_TX`) and **transmits on J25** (net
   `USB_1_RX`) — the net names are from the bridge's point of view.
 - LEDs 0–7: AC22, AC24, AE22, AE23, AB23, AG23, AE24, AD24.
