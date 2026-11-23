@@ -1,0 +1,97 @@
+{
+  "gpu": "AMD Radeon RX 7800 XT",
+  "cpu": "AMD64 Family 25 Model 33 Stepping 2, AuthenticAMD",
+  "reps": 50,
+  "sizes": {
+    "96x64": {
+      "pixels": 6144,
+      "in_bytes": 6144,
+      "out_bytes": 23312,
+      "cpu_numpy": {
+        "compute_s": 0.0003381999999874097
+      },
+      "gpu_opencl": {
+        "h2d_s": 1.4400000000000002e-06,
+        "compute_s": 4.04e-06,
+        "d2h_s": 2.08e-06,
+        "end_to_end_s": 0.0002681000000848144,
+        "compute_throughput_s": 3.0486e-06
+      },
+      "gpu_torch": {
+        "h2d_s": 0.0001339149996638298,
+        "compute_s": 0.00030824999511241914,
+        "d2h_s": 8.094999939203262e-05,
+        "end_to_end_s": 0.000638950000393379,
+        "compute_throughput_s": 0.00014840900000308464
+      },
+      "fpga": {
+        "clocks": 6165,
+        "compute_s": 3.0825e-05,
+        "source": "measured on the ML605",
+        "uart_up_s": 0.533,
+        "uart_down_s": 2.03,
+        "latency_after_last_pixel_s": 1.05e-07
+      }
+    },
+    "640x480": {
+      "pixels": 307200,
+      "in_bytes": 307200,
+      "out_bytes": 1219856,
+      "cpu_numpy": {
+        "compute_s": 0.04068504999986544
+      },
+      "gpu_opencl": {
+        "h2d_s": 8.661000000000001e-05,
+        "compute_s": 9.640000000000001e-06,
+        "d2h_s": 0.00012176500000000001,
+        "end_to_end_s": 0.0008921499997995852,
+        "compute_throughput_s": 8.1662e-06
+      },
+      "gpu_torch": {
+        "h2d_s": 0.00014869999885559082,
+        "compute_s": 0.0006776899993419646,
+        "d2h_s": 7.899999991059303e-05,
+        "end_to_end_s": 0.001062850000380422,
+        "compute_throughput_s": 0.0002723745000002964
+      },
+      "fpga": {
+        "clocks": 307221,
+        "compute_s": 0.001536105,
+        "source": "cycle-exact simulation of the board RTL",
+        "uart_up_s": 26.666666666666668,
+        "uart_down_s": 105.89027777777778,
+        "latency_after_last_pixel_s": 1.05e-07
+      }
+    },
+    "1920x1080": {
+      "pixels": 2073600,
+      "in_bytes": 2073600,
+      "out_bytes": 8270416,
+      "cpu_numpy": {
+        "compute_s": 0.31001259999993636
+      },
+      "gpu_opencl": {
+        "h2d_s": 0.00013218000000000003,
+        "compute_s": 4.6080000000000006e-05,
+        "d2h_s": 0.0007859800000000001,
+        "end_to_end_s": 0.0029390500003501074,
+        "compute_throughput_s": 4.68178e-05
+      },
+      "gpu_torch": {
+        "h2d_s": 0.00015675999969244002,
+        "compute_s": 0.0034343249797821043,
+        "d2h_s": 0.00012774999439716338,
+        "end_to_end_s": 0.003951099999994767,
+        "compute_throughput_s": 0.0026645420000022567
+      },
+      "fpga": {
+        "clocks": 2073621,
+        "compute_s": 0.010368105,
+        "source": "cycle-exact simulation of the board RTL",
+        "uart_up_s": 180.0,
+        "uart_down_s": 717.9180555555556,
+        "latency_after_last_pixel_s": 1.05e-07
+      }
+    }
+  }
+}

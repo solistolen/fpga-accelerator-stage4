@@ -17,13 +17,21 @@
 //   'I' + IMG_W*IMG_H bytes    -> 'i'   image, row by row
 //   'R' + bank (1 byte)        -> 'r', cycles (4 bytes), outputs (2 bytes)    run the frame
 //   'O'                        -> N_OUT x 4 bytes (f0 f1 f2 f3 per pixel), then 'o'
+//   'C' + bank (1 byte)        -> 'c'   continuous mode: run the frame back to back,
+//                                       non-stop, until the next byte arrives (send 'S');
+//                                       then -> 's', frames (4 bytes), clocks (5 bytes)
 //   anything else              -> '?'
+// Continuous mode exists for power measurement: a single 'R' computes for only
+// 30.8 us, far too short for a power meter to see. Each continuous frame is a
+// normal run (results go to the result memory as usual, so 'O' afterwards still
+// reads back a correct frame).
 // Multi-byte numbers are little-endian. If a command's data stops coming for
 // 2^TIMEOUT_BITS clocks (0.67 s at 200 MHz), the board drops it and waits for
 // a new command, so a PC script that was interrupted can't leave it stuck.
 //
-// LEDs: 7 heartbeat, 6 busy (inside a command), 3 last run produced every
-// output, 2 image loaded, 1 requant loaded, 0 weights loaded.
+// LEDs: 7 heartbeat, 6 busy (inside a command), 5 continuous mode running,
+// 3 last run produced every output, 2 image loaded, 1 requant loaded,
+// 0 weights loaded.
 module cnn_board #(
     parameter CLK_HZ       = 200_000_000,
     parameter BAUD         = 115_200,
@@ -189,22 +197,26 @@ module cnn_board #(
 
     // ---------------- command FSM ----------------
     localparam S_CMD = 4'd0, S_W = 4'd1, S_Q = 4'd2, S_I = 4'd3, S_RB = 4'd4,
-               S_RUN = 4'd5, S_REPLY = 4'd6, S_O_RD = 4'd7, S_O_SEND = 4'd8;
+               S_RUN = 4'd5, S_REPLY = 4'd6, S_O_RD = 4'd7, S_O_SEND = 4'd8,
+               S_CB = 4'd9, S_CONT = 4'd10;
 
     reg [3:0]              state = S_CMD;
     reg [ADDR_BITS-1:0]    cnt = 0;             // bytes received in this command
     reg [2:0]              qb = 0;              // byte within a requant record
     reg [2:0]              qrec = 0;            // requant record (bank*4 + filter)
     reg [7:0]              qbuf0 = 0, qbuf1 = 0, qbuf2 = 0, qbuf3 = 0, qbuf4 = 0;
-    reg [63:0]             rbuf = 0;            // reply bytes, sent low byte first
+    reg [79:0]             rbuf = 0;            // reply bytes, sent low byte first
     reg [3:0]              rlen = 0;
     reg [1:0]              ob = 0;              // byte within a result word
     reg [TIMEOUT_BITS-1:0] idle = 0;
     reg                    w_ok = 0, q_ok = 0, i_ok = 0, run_ok = 0;
+    reg [31:0]             cont_frames = 0;     // continuous mode: frames finished
+    reg [39:0]             cont_clocks = 0;     // continuous mode: clocks since 'C' (40 bits: 1.5 h at 200 MHz)
+    reg                    cont_stop = 0;       // 'S' (any byte) arrived: stop after this frame
 
-    // reply helper: load up to 8 bytes and go to S_REPLY
+    // reply helper: load up to 10 bytes and go to S_REPLY
     task reply;
-        input [63:0] bytes;
+        input [79:0] bytes;
         input [3:0]  n;
         begin
             rbuf  <= bytes;
@@ -222,7 +234,7 @@ module cnn_board #(
 
         // data timeout for the commands that receive bytes
         if (rx_valid || state == S_CMD || state == S_RUN || state == S_REPLY ||
-            state == S_O_RD || state == S_O_SEND)
+            state == S_O_RD || state == S_O_SEND || state == S_CONT)
             idle <= 0;
         else
             idle <= idle + 1;
@@ -243,6 +255,7 @@ module cnn_board #(
                         "Q": state <= S_Q;
                         "I": state <= S_I;
                         "R": state <= S_RB;
+                        "C": state <= S_CB;
                         "O": begin res_raddr <= 0; ob <= 0; state <= S_O_RD; end
                         default: reply("?", 4'd1);
                     endcase
@@ -298,6 +311,31 @@ module cnn_board #(
                     state  <= S_RUN;
                 end
 
+            S_CB:                               // bank byte, then run continuously
+                if (rx_valid) begin
+                    c_bank      <= rx_data[0];
+                    run_go      <= 1'b1;
+                    tx_go       <= 1'b1;        // ack now; the UART is idle here
+                    tx_byte     <= "c";
+                    cont_frames <= 0;
+                    cont_clocks <= 0;
+                    cont_stop   <= 0;
+                    state       <= S_CONT;
+                end
+
+            S_CONT: begin                       // frames back to back until a byte arrives
+                cont_clocks <= cont_clocks + 1;
+                if (run_done) begin
+                    cont_frames <= cont_frames + 1;
+                    run_ok      <= (n_out == N_OUT);
+                    if (cont_stop || rx_valid)
+                        reply({cont_clocks + 40'd1, cont_frames + 32'd1, "s"}, 4'd10);
+                    else
+                        run_go <= 1'b1;         // next frame starts right away
+                end else if (rx_valid)
+                    cont_stop <= 1'b1;
+            end
+
             S_RUN:
                 if (run_done) begin
                     run_ok <= (n_out == N_OUT);
@@ -338,5 +376,5 @@ module cnn_board #(
         endcase
     end
 
-    assign led = {beat[26], (state != S_CMD), 2'b00, run_ok, i_ok, q_ok, w_ok};
+    assign led = {beat[26], (state != S_CMD), (state == S_CONT), 1'b0, run_ok, i_ok, q_ok, w_ok};
 endmodule

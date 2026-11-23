@@ -1,0 +1,22 @@
+[
+  {
+    "size": "640x480",
+    "pixels": 307200,
+    "outputs": 304964,
+    "match": true,
+    "stream_clocks": 307219,
+    "board_clocks": 307221,
+    "board_us_at_200MHz": 1536.105,
+    "sim_seconds": 49.6
+  },
+  {
+    "size": "1920x1080",
+    "pixels": 2073600,
+    "outputs": 2067604,
+    "match": true,
+    "stream_clocks": 2073619,
+    "board_clocks": 2073621,
+    "board_us_at_200MHz": 10368.105,
+    "sim_seconds": 335.5
+  }
+]

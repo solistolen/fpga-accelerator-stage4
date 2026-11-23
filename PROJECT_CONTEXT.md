@@ -74,9 +74,32 @@ the last window that used it; requant parameters ≥ 12 clocks.
   `scripts/cnn_ref.py`. Simulated result: 6165 clocks per frame (6144 + 21), 30.8 µs at 200 MHz.
   `tb_cnn_board` drives only the UART pins; 7 planted bugs were all caught. The `cnn_stream` reset
   before every frame is required, because its row counter doesn't wrap. ISE project: `Board4b`.
-- **4c:** GPU side of the comparison (same filters on the PC GPU, e.g. Python/OpenCV or
-  PyTorch), and the measured FPGA-vs-GPU table: compute time, transfer time, latency. Faster
-  board I/O (Ethernet or PCIe) is a possible later step.
+- **4c (done 2026-11-23):** the same layer on an RX 7800 XT (hand-written OpenCL kernel, and
+  PyTorch 2.15 / ROCm 10.2) and a CPU (NumPy), all bit-exact. FPGA at 640×480 and 1080p comes
+  from cycle-exact simulation of the board RTL (`fpga_scale.py`).
+  - Compute at VGA: FPGA 1,536 µs, OpenCL 10.1 µs, PyTorch 626 µs, NumPy 36.5 ms.
+  - The GPU wins throughput by about 150–225×, and both easily meet 30 fps.
+  - The FPGA wins latency: 105 ns after the last pixel, versus 0.65–0.95 ms (VGA) to 2.7–3.4 ms (1080p)
+    for one GPU frame from host memory.
+  - Transfer dominates on both platforms (PCIe on the GPU, UART on the board).
+  - GPU libraries live in `scripts/gpulib` and `scripts/torchlib` (pip `--target`, gitignored).
+- **Power (2026-11-23):**
+  - No meter is available (the board runs from a PC power supply's PCIe 12 V cable), so the FPGA
+    figure is XPower Analyzer's estimate: 3.58 W = 3.44 static + 0.137 dynamic. Its DSP figure
+    (0.000 W) is too low. Recorded in `results/xpower_4b.txt`.
+  - The GPU is measured with its own board-power sensor through ADL (`scripts/adl_power.py`,
+    sensor 73): about 20 W idle, 234 W running VGA frames back to back, 275 W at 1080p.
+  - Energy per VGA frame: GPU OpenCL 2.0 mJ vs FPGA 5.5 mJ (whole chip), but 1.83 vs 0.21 mJ
+    counting only what computing adds. At the real 30 fps requirement: GPU about 20 W vs FPGA about 3.45 W.
+  - `cnn_board` has a continuous mode (`C`/`S`, LED 5, `scripts/power_run.py`) for a future
+    measurement with a meter. It's verified in Icarus and ISim (6169 clocks per frame) and
+    passed on the board: 324,265 frames in 10.00 s, 6169.0 clocks per frame, and cnn_host.py
+    still passes afterwards.
+  - PyTorch throughput is now measured by the wall clock (CPU-bound, about 3,700 fps at VGA).
+    GPU event timers overstate it about 2×.
+- **Open items:**
+  - optionally: an XPower run with simulation activity (SAIF) for a better dynamic number, a PCIe
+    link, or several pixels per clock on the FPGA.
 
 ## ML605 facts (checked against UG534)
 

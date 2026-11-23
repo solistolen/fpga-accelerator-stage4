@@ -1,0 +1,26 @@
+Stage 4b (top_4b, with continuous mode): XPower Analyzer, ISE 14.7
+Routed design, xc6vlx240t-1ff1156, Commercial, Typical process, 200 MHz (TS_sysclk)
+Environment: ambient 50 C (XPA default), airflow 250 LFM, medium-profile heat sink,
+medium board (10"x10"); junction 55.0 C, effective theta-JA 1.4 C/W.
+Activity: XPA vectorless defaults (no simulation activity file).
+
+On-chip power (W)        Used    Available  Util
+  Clocks       0.030        1       ---
+  Logic        0.004     1761    150720     1%
+  Signals      0.005     5137       ---
+  BRAMs        0.077        *         *
+  DSPs         0.000       40       768     5%   <- 0.000 is not credible: the default activity
+                                                    did not reach the DSP inputs, so the dynamic
+                                                    total is an underestimate
+  IOs          0.036       12       600     2%
+  Leakage      3.426
+  Total        3.579
+
+Supply summary   Voltage  Total (A)  Dynamic (A)  Quiescent (A)
+  Vccint          1.000     1.807      0.118        1.688
+  Vccaux          2.500     0.141      0.000        0.141
+  Vcco25          2.500     0.009      0.007        0.002
+  MGTAVcc         1.000     0.758      0.000        0.758   (GTX transceivers: unused, but powered)
+  MGTAVtt         1.200     0.532      0.000        0.532
+
+Supply power (W):  total 3.579 = dynamic 0.137 + quiescent 3.442

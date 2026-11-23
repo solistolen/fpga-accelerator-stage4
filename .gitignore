@@ -49,3 +49,12 @@ echo_sim
 
 # Stage 4b host script output (copy into results/ to keep)
 scripts/board_bank*.png
+
+# Stage 4c: NumPy/PyOpenCL and PyTorch (ROCm) installed with pip --target (see README)
+scripts/gpulib/
+scripts/torchlib/
+# fpga_scale.py temporary files
+sim/scale_img.hex
+sim/scale_out.hex
+sim/scale_sim
+sim/board_sim

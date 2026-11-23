@@ -15,7 +15,9 @@
 //      5828 x 4 bytes, compared with expected_bank0.txt (cnn_ref.py)
 //   5. 'R' bank 1 and 'O' again, against expected_bank1.txt (also proves a
 //      second run starts cleanly at row 0, column 0)
-//   6. LEDs 3..0 = all loaded, last run complete
+//   6. 'C' continuous mode: about 3 frames back to back, stopped with 'S'; checks
+//      the frame count, the clocks per frame, and reads back the last frame
+//   7. LEDs 3..0 = all loaded, last run complete
 `timescale 1ns/1ps
 module tb_cnn_board;
     localparam CLK_HZ = 200_000_000, DIV = 8, BAUD = CLK_HZ / DIV;
@@ -98,30 +100,14 @@ module tb_cnn_board;
     reg [7:0]  b0, b1, b2, b3;
     reg [31:0] cycles;
     reg [15:0] nout;
+    reg [31:0] cont_frames;
+    reg [39:0] cont_clocks;
+    reg [7:0]  b4;
     reg [31:0] e [0:3];
     integer    i, k, n, fq, fe, bad;
 
-    task run_and_check(input bank, input [8*24-1:0] expfile);
+    task readback(input bank, input [8*24-1:0] expfile);
         begin
-            // ---- run ----
-            pc_send("R");
-            pc_send(bank);
-            expect_byte("r", "run reply");
-            pc_recv(b0); pc_recv(b1); pc_recv(b2); pc_recv(b3);
-            cycles = {b3, b2, b1, b0};
-            pc_recv(b0); pc_recv(b1);
-            nout = {b1, b0};
-            $display("bank %0d run: %0d outputs in %0d clocks (%0.2f us at 200 MHz)",
-                     bank, nout, cycles, cycles * 0.005);
-            if (nout != N_OUT) begin
-                errors = errors + 1;
-                $display("FAIL: %0d outputs, expected %0d", nout, N_OUT);
-            end
-            if (cycles != EXPECT_CYCLES) begin
-                errors = errors + 1;
-                $display("FAIL: %0d clocks, expected %0d", cycles, EXPECT_CYCLES);
-            end
-            // ---- read back and compare ----
             fe = $fopen(expfile, "r");
             if (fe == 0) begin $display("ERROR: %0s not found (run scripts/cnn_ref.py)", expfile); $finish; end
             pc_send("O");
@@ -144,6 +130,30 @@ module tb_cnn_board;
                 $display("bank %0d readback: %0d x 4 bytes match %0s", bank, N_OUT, expfile);
             else
                 $display("bank %0d readback: %0d of %0d outputs wrong", bank, bad, N_OUT);
+        end
+    endtask
+
+    task run_and_check(input bank, input [8*24-1:0] expfile);
+        begin
+            // ---- run ----
+            pc_send("R");
+            pc_send(bank);
+            expect_byte("r", "run reply");
+            pc_recv(b0); pc_recv(b1); pc_recv(b2); pc_recv(b3);
+            cycles = {b3, b2, b1, b0};
+            pc_recv(b0); pc_recv(b1);
+            nout = {b1, b0};
+            $display("bank %0d run: %0d outputs in %0d clocks (%0.2f us at 200 MHz)",
+                     bank, nout, cycles, cycles * 0.005);
+            if (nout != N_OUT) begin
+                errors = errors + 1;
+                $display("FAIL: %0d outputs, expected %0d", nout, N_OUT);
+            end
+            if (cycles != EXPECT_CYCLES) begin
+                errors = errors + 1;
+                $display("FAIL: %0d clocks, expected %0d", cycles, EXPECT_CYCLES);
+            end
+            readback(bank, expfile);
         end
     endtask
 
@@ -197,7 +207,29 @@ module tb_cnn_board;
         run_and_check(0, "expected_bank0.txt");
         run_and_check(1, "expected_bank1.txt");
 
-        // 6. LEDs
+        // 6. continuous mode
+        pc_send("C");
+        pc_send(8'd0);
+        expect_byte("c", "continuous ack");
+        repeat (3 * EXPECT_CYCLES + 2000) @(posedge clk);
+        if (led[5] !== 1'b1) begin errors = errors + 1; $display("FAIL: LED 5 off in continuous mode"); end
+        pc_send("S");
+        expect_byte("s", "continuous stop");
+        pc_recv(b0); pc_recv(b1); pc_recv(b2); pc_recv(b3);
+        cont_frames = {b3, b2, b1, b0};
+        pc_recv(b0); pc_recv(b1); pc_recv(b2); pc_recv(b3); pc_recv(b4);
+        cont_clocks = {b4, b3, b2, b1, b0};
+        $display("continuous: %0d frames in %0d clocks = %0d clocks per frame (a single run is %0d)",
+                 cont_frames, cont_clocks, cont_clocks / cont_frames, EXPECT_CYCLES);
+        if (cont_frames < 3 || cont_clocks / cont_frames < EXPECT_CYCLES ||
+            cont_clocks / cont_frames > EXPECT_CYCLES + 8) begin
+            errors = errors + 1;
+            $display("FAIL: continuous mode: expected 3 or more frames at %0d..%0d clocks each",
+                     EXPECT_CYCLES, EXPECT_CYCLES + 8);
+        end
+        readback(0, "expected_bank0.txt");
+
+        // 7. LEDs
         if (led[3:0] !== 4'b1111) begin
             errors = errors + 1;
             $display("FAIL: LEDs 3..0 = %b, expected 1111", led[3:0]);
