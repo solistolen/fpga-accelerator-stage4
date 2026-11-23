@@ -298,6 +298,19 @@ LEDs 0–3 light up as the data is loaded and the run completes. `board_bank0.pn
 
 ## Stage 4c: FPGA vs GPU
 
+**Why this comparison:** this accelerator is for a vision-guided drone project, and the processing
+happens on the ground:
+- The drone carries only its camera and a wireless FPV video link.
+- The video reaches a **ground PC** through a capture device over USB, together with fixed room
+  cameras and RF-sensing data, all over USB.
+- An accelerator inside that PC preprocesses the video for the AI software, which sends flight
+  commands back to the drone through an embedded control board.
+
+The question Stage 4c answers is **which accelerator belongs in that ground PC: its GPU, or an
+FPGA**. The conclusions for that design are in
+[Recommendation for the drone pipeline](#recommendation-for-the-drone-pipeline-ground-pc), at the
+end of this section.
+
 The same layer (4 filters, 3×3, int8 weights, bias + ReLU + requantization to 8 bits) runs on:
 - **FPGA:** the ML605 design from 4b at 200 MHz.
 - **GPU:** an AMD Radeon RX 7800 XT (RDNA 3, 60 CUs, 16 GB), in two ways:
@@ -350,12 +363,15 @@ That file holds the most recent run, so its numbers differ slightly from the one
    - A GPU has to receive the whole frame, copy it across PCIe, run, and copy it back: 0.65–0.95 ms at VGA and 2.7–3.4 ms at 1080p from host memory.
    - With a camera, the GPU also has to wait for a full frame to be captured before it can start.
    - This is the classic FPGA advantage: deterministic, line-rate processing inside the video path.
+   - It only pays off if the FPGA actually sits in the video path. In the drone design, the video
+     reaches the PC first over USB. An FPGA card there would receive frames from the PC and send
+     results back, so it would also pay a transfer each way, like the GPU.
 4. **Transfer costs more than compute on both platforms.**
    - On the GPU, PCIe upload + download is 20× the kernel time at VGA.
    - On this FPGA, the 115200-baud UART makes a VGA frame take 26.7 s up and 106 s back.
    - **Placement matters more than raw speed:** the FPGA belongs between the camera and the host (in-line), or needs PCIe. The ML605 has a PCIe ×8 edge connector, which would be the next step.
 5. **The framework costs about 60×.** PyTorch is bit-exact but about 60× slower per frame than the hand-written kernel at VGA, and 75× slower at 1080p. The causes: several kernel launches, the float32/int64 conversions, and MIOpen convolution without tuning data (it warns that its pre-tuned tables are missing). Even with frames back to back, PyTorch sustains only 3,671 fps, 33× below OpenCL. It is limited by the CPU launching about 10 small kernels per frame. (The GPU's event timers report about twice that rate, because they don't see the launch overhead. The throughput table uses the host wall clock, which is what you actually get.)
-6. **Not measured yet: power.** The RX 7800 XT is rated at 263 W board power. The ML605 design is a few watts at most, but that needs to be measured, for example with ISE's XPower Analyzer and the board's power monitor. Energy per frame could reverse the throughput result, so it should be in the final trade study.
+6. **Power and energy** are covered in [Energy per frame](#energy-per-frame) below: the GPU is measured with its own sensor, the FPGA estimated with XPower Analyzer.
 
 ### Running it
 
@@ -489,8 +505,9 @@ Full table: [results/power_4c.md](results/power_4c.md). The numbers repeat withi
 3. **At the real requirement, 640×480 at 30 fps, the FPGA needs about 6× less power.** The
    GPU board idles at about 20 W and adds 30 × 1.83 mJ = 0.05 W, so about **20 W**. The FPGA chip
    needs 3.44 W static plus 30/651 of its 0.137 W dynamic, so about **3.45 W**. That doesn't even
-   count the PC around the GPU (CPU, memory, chipset). For an embedded video pipeline, this is
-   the number that matters.
+   count the PC around the GPU (CPU, memory, chipset). For a battery-powered or embedded pipeline,
+   this would be the number that matters. For the drone project's ground PC, which runs from the
+   wall, it matters much less (see the recommendation below).
 4. **A wider FPGA design would win on energy outright.** Static power doesn't grow with the work
    done. Using all 768 DSPs (about 19 pixels per clock) would multiply the frame rate by about 19,
    while static stays 3.44 W and dynamic grows to about 19 × 0.137 = 2.6 W. That's about 6 W for
@@ -522,22 +539,23 @@ more than that, and the two platforms fit into a system differently.
 | **GPU** | The graphics card's total board power, from its own sensor | The host PC the card needs: CPU, motherboard, RAM, storage and power-supply losses, plus the CPU's extra work while driving the GPU. PyTorch is CPU-bound, so a CPU core was busy during its runs |
 | **FPGA** | The xc6vlx240t chip itself (XPower Analyzer estimate) | The rest of the ML605 board (DDR3 memory, oscillators, the USB-UART bridge, LEDs, and the regulators' losses converting 12 V to the chip's supplies), and the PC that supplied frames over the UART in these tests |
 
-**How each platform would be deployed:**
-- **GPU:** it can't run on its own. A GPU-based pipeline is always camera → host PC → GPU card →
-  host PC, so the PC's power is part of the cost of every frame. A desktop like the one used here
-  typically draws several tens of watts at idle, on top of the card's own 20 W.
-- **FPGA:** it can sit **inside the video path**: camera → FPGA → output or network, with no PC.
-  Control can come from a small processor on the same chip or board. The PC and UART in these tests
-  were only a way to load test data and read results back, not part of a deployed design. Pixels
-  would arrive from the camera at the rate the design already handles, one per clock.
+**Two ways to deploy it, with different conclusions:**
+
+| | Ground PC (the drone project's design) | Embedded or on the vehicle |
+|---|---|---|
+| Where the video goes | Drone FPV link → capture device → **PC over USB** | Camera → processor next to it |
+| GPU | Already in the PC, which runs the AI software anyway, so **no extra host cost** | Needs a host computer of its own; a desktop GPU is out of the question, so it would have to be an embedded GPU module (not measured here) |
+| FPGA | A board or card attached to the PC (PCIe or USB 3; the 115200-baud UART is far too slow), or placed **between the capture device and the PC** to sit in the video path | Can sit directly in the video path: camera → FPGA → output, with no PC |
+| Power | Mains-powered: a secondary concern | Battery and heat: decisive |
 
 **What this means for the comparison:**
-- At the requirement (640×480 at 30 fps), the chip-level figures are **about 3.45 W for the FPGA
-  versus about 20 W for the GPU card**.
-- At the system level, the gap is most likely **larger**: the GPU needs a whole PC, while the FPGA
-  needs only its own board.
+- **Ground PC:** the GPU's chip-level power disadvantage (about 20 W versus about 3.45 W at
+  30 fps) is real, but it costs little on mains power, and the PC is needed anyway. The GPU's speed,
+  its cheap PCIe transfers and its direct integration with the vision software count for more.
+- **Embedded:** the FPGA's power at the requirement (about 6× less at chip level, probably more at
+  system level) and its in-line latency count for most, and a desktop GPU isn't an option at all.
 - At maximum throughput, the GPU's per-frame energy advantage (2.0 vs 5.5 mJ at VGA, whole chip)
-  would shrink once the PC's power is shared across its frames, but it would probably remain.
+  holds in both cases.
 
 **What would firm this up:**
 1. A plug-in wall meter on the PC, idle versus running `power_4c.py`: the GPU system's total.
@@ -548,3 +566,42 @@ more than that, and the two platforms fit into a system differently.
 
 None of these system-level numbers have been measured here, so the recommendation rests on the
 chip-level figures plus the deployment argument above.
+
+### Recommendation for the drone pipeline (ground PC)
+
+| Factor | GPU in the ground PC | FPGA attached to the ground PC |
+|---|---|---|
+| Meets 640×480 at 30 fps | Yes: 0.65–0.95 ms per frame end to end | Yes: 1.5 ms of compute per frame |
+| Meets 1920×1080 at 60 fps (16.7 ms per frame) | Yes, easily: 2.7–3.4 ms end to end | This design: 10.4 ms per frame (96 fps; simulated, bit-exact), so yes, with 1.6× margin |
+| Room for a bigger vision network | Very large | Limited by DSPs: about 16,700 multiply-adds per pixel at 480p30 on the LX240T, but only about 1,235 at 1080p60 (this layer uses 40) |
+| Transfer | PCIe, already in place | Needs a PCIe or USB 3 link to be built; the UART used for testing is far too slow |
+| Latency it adds | About 1–3 ms per frame | About 1.5–10 ms of compute plus transfers, as an attached card; 105 ns only if placed in the video path |
+| Integration with the AI software | Direct (OpenCL, PyTorch, OpenCV in Python) | Custom protocol, drivers and host code |
+| Power | About 20 W at 30 fps (mains) | About 3.5 W chip (estimate) |
+
+**Recommendation: use the GPU in the ground PC as the video accelerator.**
+- It meets every frame-rate target with a large margin and adds only milliseconds.
+- It's already in the PC that runs the AI software.
+- It leaves room for a much larger vision network.
+- Its power cost doesn't matter much on mains.
+
+**Where the FPGA stays relevant:**
+1. **As the measured alternative** that justifies the choice in the trade study.
+2. **In the video path:** placed between the capture device and the PC, for deterministic,
+   sub-microsecond preprocessing before frames reach the PC.
+3. **For a future on-drone version,** where its low power and in-line processing would matter most.
+
+  The team's smaller **Basys 3** (Artix-7 35T: 90 DSPs, 50 block RAMs) could hold this layer (40 DSPs;
+  a 640-pixel line buffer needs 1 block RAM). At its 100 MHz clock, it would handle up to
+  100 Mpixel/s: 1080p at 30 fps, but not at 60 fps. This hasn't been built.
+
+**What sets the end-to-end latency** (not measured here; typical values): the wireless FPV link
+plus the USB capture device (typically tens of milliseconds, often one or more frames), and above
+all the AI's decision time (typically seconds for a large language model). Preprocessing at about
+1–3 ms on either platform is a small part of that total, so the accelerator choice should rest on
+throughput headroom, integration effort and cost. The project plan includes measuring the
+end-to-end control and video latency, which will confirm this.
+
+**Resolution:** on the ground PC, compute doesn't limit the resolution; even 1080p at 60 fps is easy.
+Choose it based on what the vision pipeline needs to recognize, and on what the FPV link, the
+capture device and the room cameras actually deliver.

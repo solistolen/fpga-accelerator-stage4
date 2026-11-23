@@ -12,6 +12,18 @@ comparison for a real-time video pipeline**, a senior design trade-study task: b
 operation on both, measure processing time, transfer time, latency and power, and recommend a
 platform. The requirement used throughout is **640×480 at 30 fps** (about 9.2 Mpixel/s).
 
+**Where the accelerator sits in the project (Proposal Part 2):** a vision-guided drone whose
+processing is all on the **ground**:
+- The drone carries only its camera and a wireless FPV video link.
+- The video reaches a **ground PC** through a capture device over USB. Fixed room cameras and an
+  SDR-based RF sensing module also connect to the PC over USB, and everything runs from the wall.
+- In the PC, the **GPU/FPGA accelerator** preprocesses the video for the AI host (Claude Code with
+  an MCP server).
+- The AI host sends flight commands to a Raspberry Pi, which drives the drone controller (or a
+  Pixhawk over MAVLink as a fallback).
+- Stage 4 is the plan's task "Prototype FPGA vs. GPU video preprocessing" and the input to
+  "Select AI processing platform (PC GPU vs. FPGA)". Nothing in this design has to fly.
+
 ## Status at a glance
 
 | Stage | What | Status |
@@ -125,17 +137,31 @@ flags, not weights.
 
 ### Conclusions for the trade study
 
+**Recommendation for the drone project's ground PC: the GPU.** It meets 480p30 and 1080p60 with
+a large margin (1–3 ms per frame end to end), is already in the PC that runs the AI host, integrates
+directly with the vision software, has cheap PCIe transfers, and leaves room for a much larger
+network. Its power (about 20 W at 30 fps, about 275 W flat out) matters little on mains.
+
+What the measurements show, and how they apply here:
 1. **Speed:** the GPU wins raw throughput by about 150× (VGA) to 225× (1080p). The FPGA design uses
-   5% of the chip at 1 pixel per clock.
-2. **Requirement:** both meet 640×480 at 30 fps with a large margin (FPGA 20×). The CPU alone just misses.
-3. **Latency:** the FPGA wins by orders of magnitude, because it streams. It's deterministic, needs
-   only a two-row buffer, and doesn't wait for a whole frame.
-4. **Power at the requirement:** the FPGA uses about 6× less at chip level, probably more at system level.
-5. **Energy per frame at full speed:** the GPU wins at chip level, because 96% of the FPGA's energy
-   is static leakage of a large 2009-era chip. A wider design (about 19 pixels per clock) or a
-   smaller, newer FPGA would likely reverse that, but both are projections.
-6. **Transfer** dominates both platforms: PCIe on the GPU, the 115200-baud UART on the board.
-   Placement matters: in-line with the camera, or on PCIe.
+   5% of the chip at 1 pixel per clock, but still meets 480p30 (20× margin) and 1080p60 (1.6×,
+   simulated).
+2. **Network size is the real limit on an FPGA:** about 16,700 multiply-adds per pixel are available
+   at 480p30 on the LX240T, but only about 1,235 at 1080p60. This layer uses 40.
+3. **Latency:** the FPGA's 105 ns only applies when it sits in the video path. As a card attached to
+   the ground PC, it pays transfers like the GPU. Either way, preprocessing (about 1–3 ms) is small
+   next to the FPV link and capture device (typically tens of ms) and the AI's decision time
+   (typically seconds). The end-to-end latency hasn't been measured yet; it's in the project plan.
+4. **Power:** the FPGA uses about 6× less at 30 fps at chip level (3.45 W versus 20 W). That's
+   decisive for an embedded or on-drone version, and secondary on a mains-powered ground PC.
+5. **Energy per frame at full speed:** the GPU wins at chip level (2.0 vs 5.5 mJ at VGA). A wider
+   or right-sized FPGA would likely reverse that (a projection).
+6. **Where the FPGA stays relevant:** as the measured alternative in the trade study, in the video
+   path (between the capture device and the PC), and for a future on-drone version.
+   - The team's Basys 3 (Artix-7 35T: 90 DSPs, 50 block RAMs) could hold this layer (40 DSPs).
+     At 100 MHz it would handle 1080p at 30 fps, not 60. Not built.
+7. **Resolution** on the ground PC is set by the cameras, the FPV link, the capture device and
+   what the vision pipeline needs, not by compute.
 
 ## Recurring lessons
 
