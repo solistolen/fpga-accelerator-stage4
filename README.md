@@ -504,10 +504,47 @@ Full table: [results/power_4c.md](results/power_4c.md). The numbers repeat withi
 - The FPGA figures are tool estimates, not measurements. XPA used its default activity and a 50 °C
   ambient, and its DSP figure (0.000 W) is clearly too low.
 - The GPU figures are the card's own sensor, which AMD reports as total board power.
-- Neither side includes the host PC.
+- Neither side includes the host PC, or the rest of the system. See the system-level view below.
 
 ```
 cd scripts
 python power_4c.py        # GPU power and energy per frame (about 1 minute; leave the PC idle)
 python power_run.py       # board continuous mode, for a future measurement with a meter
 ```
+
+### System-level view
+
+All the power figures above are at the **chip or card level**. A complete video system contains
+more than that, and the two platforms fit into a system differently.
+
+| | Included in the figures above | Not included |
+|---|---|---|
+| **GPU** | The graphics card's total board power, from its own sensor | The host PC the card needs: CPU, motherboard, RAM, storage and power-supply losses, plus the CPU's extra work while driving the GPU. PyTorch is CPU-bound, so a CPU core was busy during its runs |
+| **FPGA** | The xc6vlx240t chip itself (XPower Analyzer estimate) | The rest of the ML605 board (DDR3 memory, oscillators, the USB-UART bridge, LEDs, and the regulators' losses converting 12 V to the chip's supplies), and the PC that supplied frames over the UART in these tests |
+
+**How each platform would be deployed:**
+- **GPU:** it can't run on its own. A GPU-based pipeline is always camera → host PC → GPU card →
+  host PC, so the PC's power is part of the cost of every frame. A desktop like the one used here
+  typically draws several tens of watts at idle, on top of the card's own 20 W.
+- **FPGA:** it can sit **inside the video path**: camera → FPGA → output or network, with no PC.
+  Control can come from a small processor on the same chip or board. The PC and UART in these tests
+  were only a way to load test data and read results back, not part of a deployed design. Pixels
+  would arrive from the camera at the rate the design already handles, one per clock.
+
+**What this means for the comparison:**
+- At the requirement (640×480 at 30 fps), the chip-level figures are **about 3.45 W for the FPGA
+  versus about 20 W for the GPU card**.
+- At the system level, the gap is most likely **larger**: the GPU needs a whole PC, while the FPGA
+  needs only its own board.
+- At maximum throughput, the GPU's per-frame energy advantage (2.0 vs 5.5 mJ at VGA, whole chip)
+  would shrink once the PC's power is shared across its frames, but it would probably remain.
+
+**What would firm this up:**
+1. A plug-in wall meter on the PC, idle versus running `power_4c.py`: the GPU system's total.
+2. The ML605's 12 V input (an inline PCIe power meter on its cable) or its PMBus rails (TI adapter
+   on J3): the FPGA board's total, using `power_run.py`.
+3. For a deployed design, an estimate for a smaller, newer FPGA sized for the job. Most of this
+   chip's 3.44 W is the leakage of a large 2009-era device that this design uses only 5% of.
+
+None of these system-level numbers have been measured here, so the recommendation rests on the
+chip-level figures plus the deployment argument above.
