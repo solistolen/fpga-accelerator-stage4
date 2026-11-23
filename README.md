@@ -7,7 +7,7 @@ XC6VLX240T-1FF1156). Earlier stages: [stage 2](https://github.com/solistolen/fpg
 
 | Step | What | Status |
 |---|---|---|
-| **4a** | Board bring-up: heartbeat LED + UART echo | Verified in simulation; **not yet run on the board** |
+| **4a** | Board bring-up: heartbeat LED + UART echo | **Passed on the ML605** (2026-11-23): timing met at 200 MHz, LED blinks, UART echo PASS |
 | 4b | The CNN layer behind the UART: PC sends weights, parameters and an image; the board returns the 4 feature maps and a cycle count | Planned |
 | 4c | Measured FPGA vs GPU comparison | Planned |
 
@@ -70,6 +70,33 @@ cd sim
 iverilog -o echo_sim tb_echo_core.v ../rtl/4a_board_bringup/echo_core.v ../rtl/4a_board_bringup/uart_rx.v ../rtl/4a_board_bringup/uart_tx.v
 vvp echo_sim
 ```
+
+### Result on the ML605 (2026-11-23)
+
+| Check | Result |
+|---|---|
+| Build (ISE 14.7, xc6vlx240t-1ff1156) | No errors; all signals routed; **All Constraints Met** (`TS_sysclk` 5 ns, 200 MHz), final timing score 0 |
+| Programming (iMPACT over JTAG from the VirtualBox VM) | JTAG chain: Device 1 `xccace` (System ACE, bypassed), Device 2 `xc6vlx240t` → Program Succeeded |
+| Heartbeat | **LED 7 blinks**: configured, 200 MHz clock running |
+| UART (`scripts/uart_test.py`, CP2103 on COM3) | 256 values PASS, 2000-byte burst PASS, **11,453 bytes/s each way** (max 11,520 at 115200 8N1, i.e. 99.4%) |
+
+```
+Opening COM3 at 115200 baud, 8N1
+  all values 0..255 (16 at a time)     PASS (256 bytes)
+  2000 random bytes in one burst       PASS (2000 bytes)
+  throughput: 11453 bytes/s each way (115200 baud, 10 bits/byte: max 11520)
+PASS: the ML605 UART link works
+```
+
+This confirms the clock, LED and UART pins (including the confusingly named `USB_1_TX` = FPGA
+receive on J24), the whole tool flow from the VM, and the UART logic in hardware. `DIFF_TERM = TRUE`
+on SYSCLK was accepted as is. The only warnings were the usual unused LUT-RAM outputs
+(`PhysDesignRules:367`, `Mram_fifo…_RAMD_D1_O`) from the 16-byte FIFO, which are harmless.
+
+Bring-up notes: the Windows CP2103 showed in Device Manager with an error until the Silicon Labs
+CP210x VCP driver was installed. In iMPACT, the first "Assign New Configuration File" dialog
+(`*.mpm *.bsd`) is for the System ACE, so choose **Bypass** there and give `top_4a.bit` to the
+second dialog.
 
 ### On the board
 

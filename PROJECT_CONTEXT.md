@@ -62,8 +62,10 @@ the last window that used it; requant parameters ≥ 12 clocks.
 
 ## Stage 4 plan
 
-- **4a (done in simulation):** heartbeat LED + UART echo (+1). Next: build, program, run
-  `scripts/uart_test.py`. This also gives the first **post-place-and-route** timing.
+- **4a (passed on the board, 2026-11-23):** heartbeat LED + UART echo (+1). Timing met at 200 MHz
+  after place and route (score 0), LED 7 blinks, `scripts/uart_test.py` PASS at 11,453 bytes/s
+  (99.4% of 115200 baud). JTAG chain = `xccace` (bypass) + `xc6vlx240t`. Windows needed the
+  Silicon Labs CP210x VCP driver.
 - **4b:** put `cnn_stream` on the board behind the UART. Proposed: PC sends weights (72 bytes),
   requant parameters, then an image into an on-chip BRAM; the board runs the image through the
   layer at full clock speed into an output BRAM while a cycle counter measures it; then the PC
@@ -87,12 +89,18 @@ the last window that used it; requant parameters ≥ 12 clocks.
 ## Environment
 
 **ISE 14.7 runs in a VirtualBox Linux VM** (user `ise`). Files are moved through a VirtualBox
-shared folder mapped to Windows `Downloads`:
+shared folder. On the main PC (from 2026-11-22) the share is named `FPGA` and maps to
+`D:\FPGA Accelerator (Virtex 6 ML605)`, which holds clones of the three repos (the original PC used
+a share named `Downloads`):
 
 ```
-sudo mount -t vboxsf Downloads /mnt/share        # once per VM boot
-cp /mnt/share/<folder>/*.v /home/ise/<Project>/
+sudo mount -t vboxsf FPGA /mnt/share             # once per VM boot
+cp /mnt/share/fpga-accelerator-stageN/<path>/*.v /home/ise/<Project>/
 ```
+
+`mount.vboxsf: … Protocol error` means no share with that name exists: VirtualBox names a new
+share after the folder unless you type a name. The VM's Guest Additions are 5.1.30 (host
+VirtualBox 7.2.16), and that works.
 
 ISE projects in the VM (one per top module): `/home/ise/MACmodule` (stage 1/2a), `Sobel` (2b–3a),
 `Conv` (3b), `CNN` (3c), `Board4a` (4a). In ISE: Add Source with association **All** for design
